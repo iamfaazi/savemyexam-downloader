@@ -4,250 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SaveMyExam Downloader App - Homepage</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css"
-          integrity="sha512-Kc323vGBEqzTmouAECnVceyQqyqdsSiqLQISBL29aUW4U/M7pSPA/gEUZQqv1cwx4OnYxTxve5UMg5GT6L4JJg=="
-          crossorigin="anonymous" referrerpolicy="no-referrer"/>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            max-width: 80%;
-            margin: auto;
-            background: url(../assets/benner_1.jpg) no-repeat;
-            background-size: calc(88% * 2);
-        }
-
-        input, textarea {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-        }
-
-        .button-container {
-            display: flex; /* Enable flexbox */
-            justify-content: center; /* Center horizontally */
-            align-items: center; /* Center vertically */
-            height: 75vh; /* Full viewport height */
-        }
-
-        #loginBtn {
-            padding: 10px 20px;
-            background-color: #007BFF;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-right: 10px;
-            text-align: center;
-        }
-
-        #loginBtn:hover {
-            background-color: #0056b3;
-        }
-
-        #loginBtn:disabled {
-            cursor: progress;
-            opacity: 0.75;
-        }
-
-
-        /* Hide default scrollbar */
-        ::-webkit-scrollbar {
-            width: 10px; /* Width of the scrollbar */
-        }
-
-        /* Track (background) of the scrollbar */
-        ::-webkit-scrollbar-track {
-            background: rgba(0, 0, 0, 0.1); /* Light gray background */
-            border-radius: 5px; /* Rounded corners */
-        }
-
-        /* Handle (the draggable part of the scrollbar) */
-        ::-webkit-scrollbar-thumb {
-            background: rgba(0, 0, 0, 0.4); /* Darker gray for the scrollbar handle */
-            border-radius: 5px; /* Rounded corners */
-        }
-
-        p {
-            margin-bottom: 5px;
-        }
-
-        .hidden {
-            display: none;
-        }
-
-        .title {
-            text-align: center;
-        }
-
-        .author {
-            text-align: center;
-            font-size: 0.75em;
-            font-weight: 600;
-            position: fixed;
-            left: 50%;
-            color: #007BFF;
-            transform: translate(-50%, 0%);
-            bottom: -16px;
-            cursor: pointer;
-        }
-
-        .table-container {
-            width: 100%; /* Allow full width for responsiveness */
-            display: grid;
-            place-items: center; /* Center content within the grid container */
-            max-height: calc(100vh - 320px);
-            overflow-y: auto;
-            margin-top: 2rem;
-            border-bottom: 2px solid #007BFF;
-        }
-
-        .styled-table {
-            border-collapse: collapse;
-            font-size: 1em;
-            min-width: 600px;
-            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.15);
-            max-height: 400px; /* Limits the table height */
-            overflow-y: hidden; /* Adds vertical scrolling */
-            margin-right: 2px;
-            width: 100%;
-        }
-
-
-        .styled-table th,
-        .styled-table td {
-            padding: 0.5rem 1rem;
-            text-align: left;
-        }
-
-        .styled-table thead tr {
-            background-color: #007BFF;
-            color: #ffffff;
-        }
-
-        .styled-table thead th {
-            position: sticky;
-            top: 0;
-            background-color: #007BFF; /* Ensure background color stays with sticky */
-            z-index: 1; /* Ensure the header stays on top of the content */
-            padding: 0.5rem 1rem;
-            text-align: left;
-        }
-
-        .styled-table tbody tr {
-            border-bottom: 1px solid #dddddd;
-            cursor: pointer;
-        }
-
-        .styled-table tbody tr:nth-of-type(even) {
-            background-color: #f3f3f3;
-        }
-
-        /*.styled-table tbody tr:last-of-type {*/
-        /*    border-bottom: 2px solid #007BFF;*/
-        /*}*/
-
-        .styled-table tbody tr:hover {
-            background-color: #f1f1f1;
-        }
-
-        .checkbox-container {
-            display: flex;
-            align-items: center;
-            cursor: pointer; /* Show pointer cursor on hover */
-        }
-
-        .checkbox-container input {
-            display: none; /* Hide the default checkbox */
-        }
-
-        .checkmark {
-            width: 15px;
-            height: 15px;
-            border: 2px solid #b8b8b8; /* Border color */
-            border-radius: 4px; /* Rounded corners */
-            margin-right: 10px; /* Space between checkbox and text */
-            position: relative; /* Positioning for the checkmark */
-            transition: background-color 0.3s, border-color 0.3s; /* Transition effect */
-        }
-
-        .checkbox-container input:checked + .checkmark {
-            background-color: #f44336; /* Background color when checked */
-            border-color: #f44336; /* Border color when checked */
-        }
-
-        .checkmark::after {
-            content: '';
-            position: absolute;
-            left: 5px; /* Adjust based on size */
-            top: 1px; /* Adjust based on size */
-            width: 4px; /* Width of the checkmark */
-            height: 8px; /* Height of the checkmark */
-            border: solid white; /* Checkmark color */
-            border-width: 0 2px 2px 0; /* Border styling for checkmark */
-            transform: rotate(45deg); /* Rotate to make a checkmark */
-            opacity: 0; /* Hidden by default */
-            transition: opacity 0.3s; /* Transition effect */
-        }
-
-        .checkbox-container input:checked + .checkmark::after {
-            opacity: 1; /* Show checkmark when checked */
-        }
-
-
-        .checkbox-container input:indeterminate + .checkmark {
-            background-color: #f44336;
-            border-color: #f44336;
-        }
-
-        .checkbox-container input:indeterminate + .checkmark::after {
-            opacity: 0; /* Hide checkmark for indeterminate */
-        }
-
-        .checkbox-container input:indeterminate + .checkmark::before {
-            content: '';
-            position: absolute;
-            left: 2px;
-            top: 7px;
-            width: 11px;
-            height: 2px;
-            background-color: white; /* White dash to represent indeterminate state */
-            opacity: 1;
-        }
-
-        .text-center {
-            text-align: center;
-        }
-
-        .nextBtn--container {
-            display: flex;
-            justify-content: center;
-        }
-
-        button {
-            padding: 10px 20px;
-            background-color: #007BFF;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-right: 10px;
-            margin-top: 0.5rem;
-        }
-
-        button:hover {
-            background-color: #0056b3;
-        }
-
-        button:disabled {
-            cursor: progress;
-            opacity: 0.75;
-        }
-
-
-    </style>
+    <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body x-data="$store.subjectData">
 <h1 class="title">SaveMyExam Downloader</h1>
@@ -267,6 +24,9 @@
         Welcome to your Save My Exams account and launchpad to stress-free and effective study.
     </p>
 
+    <div class="table-action">
+        <span class="success"><i class="fas fa-circle-check"></i> Completed</span>
+    </div>
     <div class="table-container">
         <table class="styled-table">
             <thead>
@@ -286,7 +46,7 @@
 
             <template x-for="item in $store.subjectData.items" :key="item.id">
                 <tr @click="item.checked = !item.checked; updateSelectAllState()"
-                    :class="{'checked-row': item.checked}">
+                    :class="{'checked-row': item.checked,'success completed': item.completed}">
                     <td @click.stop>
                         <label class="checkbox-container">
                             <input type="checkbox" class="child-checkbox" x-model="item.checked"
@@ -294,7 +54,10 @@
                             <span class="checkmark"></span>
                         </label>
                     </td>
-                    <td x-text="item.subjectTitle"></td>
+                    <td>
+                        <span x-show="item.completed"><i class="fas fa-circle-check"></i> </span>
+                        <span x-text="item.subjectTitle"></span>
+                    </td>
                     <td x-text="item.subjectLevel"></td>
                 </tr>
             </template>
@@ -327,7 +90,7 @@
     MiRzA Haris © All right reserved.
 </h6>
 
-<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
 <!-- Link to the JavaScript file -->
 <script src="./index-renderer.js"></script>
 </body>

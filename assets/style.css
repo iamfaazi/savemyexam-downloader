@@ -1,0 +1,379 @@
+@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css');
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&display=swap');
+
+:root {
+    --primary-color: #3498db;
+    --success-color: #00C853;
+    --info-color: #007BFF;
+    --warning-color: #F9A825;
+    --danger-color: #C62828;
+    --btn-primary-color: var(--info-color);
+    --btn-primary-hover: #0056b3;
+    --checkbox-theme: #f44336;
+}
+
+/*scrollbar Styles*/
+
+/* Hide default scrollbar */
+::-webkit-scrollbar {
+    width: 10px; /* Width of the scrollbar */
+}
+
+/* Track (background) of the scrollbar */
+::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1); /* Light gray background */
+    border-radius: 5px; /* Rounded corners */
+}
+
+/* Handle (the draggable part of the scrollbar) */
+::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.4); /* Darker gray for the scrollbar handle */
+    border-radius: 5px; /* Rounded corners */
+}
+
+/* Handle hover effect */
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.6); /* Darker when hovered */
+}
+
+* {
+    scrollbar-width: thin; /* For Firefox */
+    scrollbar-color: rgba(0, 0, 0, 0.4) rgba(0, 0, 0, 0.1); /* Handle and track colors */
+}
+
+body {
+    /*font-family: "Roboto", sans-serif, Arial, sans-serif;*/
+    font-family: "Open Sans", sans-serif;
+    padding: 20px;
+    max-width: 80%;
+    margin: auto;
+    background: url(../assets/benner_1.jpg) no-repeat;
+    background-size: calc(88% * 2);
+}
+
+input, textarea {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+
+/*Buttons*/
+button {
+    padding: 10px 20px;
+    background-color: var(--info-color);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-right: 10px;
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+button:disabled {
+    cursor: progress;
+    opacity: 0.75;
+}
+
+.button-container {
+    display: flex; /* Enable flexbox */
+    justify-content: center; /* Center horizontally */
+    align-items: center; /* Center vertically */
+    height: 75vh; /* Full viewport height */
+}
+
+#loginBtn {
+    padding: 10px 20px;
+    background-color: var(--btn-primary-color);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-right: 10px;
+    text-align: center;
+}
+
+#loginBtn:hover {
+    background-color: #0056b3;
+}
+
+#loginBtn:disabled {
+    cursor: progress;
+    opacity: 0.75;
+}
+
+button:disabled {
+    cursor: not-allowed;
+}
+
+button:hover, .styled-table tbody tr:hover {
+    transition: background-color 0.3s ease;
+}
+
+
+#output {
+    margin: 10px 0;
+    white-space: pre-wrap;
+    font-size: 14px;
+    background-color: #f4f4f4;
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+    max-height: 200px; /* Set a fixed height */
+    overflow-y: auto; /* Enable vertical scrolling */
+    scroll-behavior: smooth; /* Enable smooth scrolling */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    min-height: 200px;
+}
+
+p {
+    margin-bottom: 5px;
+}
+
+.hidden {
+    display: none;
+}
+
+.title {
+    text-align: center;
+}
+
+.author {
+    text-align: center;
+    font-size: 0.75em;
+    font-weight: 600;
+    position: fixed;
+    left: 50%;
+    color: var(--info-color);
+    transform: translate(-50%, 0%);
+    bottom: -16px;
+    cursor: pointer;
+}
+
+.log {
+    margin: 0;
+    font-weight: 600;
+}
+
+.success {
+    color: var(--success-color);
+}
+
+.warning {
+    color: var(--warning-color);
+}
+
+.danger {
+    color: var(--danger-color);
+}
+
+.info {
+    color: var(--info-color);
+}
+
+
+.pl-3 {
+    padding: 0.75rem;
+}
+
+.indent {
+    padding-left: 0.75rem;
+}
+
+.pl-2 {
+    padding-left: 0.5rem;
+}
+
+.pl-5 {
+    padding-left: 1.25rem;
+}
+
+.selected-list {
+    max-height: 100px;
+    overflow-y: auto;
+}
+
+.subtitle {
+    color: #C62828;
+    font-weight: 600;
+}
+
+.download-log {
+    display: inline-flex;
+    margin-top: 0 !important;
+    padding: 0.1rem 1.25rem;
+    line-height: 1;
+    white-space: initial;
+    align-items: center;
+}
+
+.app-log {
+    display: inline-flex;
+    margin-top: 0.85rem;
+    margin-bottom: 0.25rem;
+    white-space: initial;
+}
+
+.download-log i, .app-log i {
+    margin-right: 0.5rem;
+}
+
+.table-container {
+    width: 100%; /* Allow full width for responsiveness */
+    display: grid;
+    place-items: center; /* Center content within the grid container */
+    max-height: calc(100vh - 320px);
+    overflow-y: auto;
+    margin-top: 1.5rem;
+    border-bottom: 2px solid var(--info-color);
+}
+
+.styled-table {
+    border-collapse: collapse;
+    font-size: 1em;
+    min-width: 600px;
+    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.15);
+    max-height: 400px; /* Limits the table height */
+    overflow-y: hidden; /* Adds vertical scrolling */
+    margin-right: 2px;
+    width: 100%;
+}
+
+
+.styled-table th,
+.styled-table td {
+    padding: 0.5rem 1rem;
+    text-align: left;
+}
+
+.styled-table thead tr {
+    background-color: var(--info-color);
+    color: #ffffff;
+}
+
+.styled-table thead th {
+    position: sticky;
+    top: 0;
+    background-color: var(--info-color); /* Ensure background color stays with sticky */
+    z-index: 1; /* Ensure the header stays on top of the content */
+    padding: 0.5rem 1rem;
+    text-align: left;
+}
+
+.styled-table tbody tr {
+    border-bottom: 1px solid #dddddd;
+    cursor: pointer;
+}
+
+.styled-table tbody tr:nth-of-type(even) {
+    background-color: #f3f3f3;
+}
+
+.styled-table tbody tr:hover {
+    background-color: #f1f1f1;
+}
+
+/*Checkbox*/
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    cursor: pointer; /* Show pointer cursor on hover */
+}
+
+.checkbox-container input {
+    display: none; /* Hide the default checkbox */
+}
+
+.checkmark {
+    width: 15px;
+    height: 15px;
+    border: 2px solid #b8b8b8; /* Border color */
+    border-radius: 4px; /* Rounded corners */
+    margin-right: 10px; /* Space between checkbox and text */
+    position: relative; /* Positioning for the checkmark */
+    transition: background-color 0.3s, border-color 0.3s; /* Transition effect */
+}
+
+.checkbox-container input:checked + .checkmark {
+    background-color: var(--checkbox-theme); /* Background color when checked */
+    border-color: var(--checkbox-theme); /* Border color when checked */
+}
+
+.checkmark::after {
+    content: '';
+    position: absolute;
+    left: 5px; /* Adjust based on size */
+    top: 1px; /* Adjust based on size */
+    width: 4px; /* Width of the checkmark */
+    height: 8px; /* Height of the checkmark */
+    border: solid white; /* Checkmark color */
+    border-width: 0 2px 2px 0; /* Border styling for checkmark */
+    transform: rotate(45deg); /* Rotate to make a checkmark */
+    opacity: 0; /* Hidden by default */
+    transition: opacity 0.3s; /* Transition effect */
+}
+
+.checkbox-container input:checked + .checkmark::after {
+    opacity: 1; /* Show checkmark when checked */
+}
+
+.checkbox-container input:indeterminate + .checkmark {
+    background-color: var(--checkbox-theme);
+    border-color: var(--checkbox-theme);
+}
+
+.checkbox-container input:indeterminate + .checkmark::after {
+    opacity: 0; /* Hide checkmark for indeterminate */
+}
+
+.checkbox-container input:indeterminate + .checkmark::before {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 7px;
+    width: 11px;
+    height: 2px;
+    background-color: white; /* White dash to represent indeterminate state */
+    opacity: 1;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.nextBtn--container {
+    display: flex;
+    justify-content: center;
+    margin-top: 0.75rem;
+}
+
+.completed {
+    background-color: #E8F5E9 !important;
+}
+
+.completed i {
+    margin-left: -1.25rem;
+    display: inline-flex;
+}
+
+.table-action {
+    display: flex;
+    justify-content: end;
+    margin-bottom: -1rem;
+    font-size: 0.80em;
+    font-weight: 600;
+}
+
+.download-location, .hasLocation {
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.download-location #download-path, .hasLocation {
+    text-decoration: underline;
+}

@@ -21,10 +21,6 @@ window.electronAPI.on('loading', (event, state) => {
         loginBtnIcon.classList.toggle('hidden');
         loginBtnLoader.classList.toggle('hidden');
         loginBtnLabel.innerText = 'Login & Browse';
-
-        //Show main container
-        // loginBtnContainer.classList.toggle('hidden');
-        // document.querySelector('.main-container').classList.toggle('hidden')
     }
 
     loginBtn.disabled = state;
@@ -41,27 +37,15 @@ window.electronAPI.on('set-greeting', (event, message) => {
 
 // Listen for updates from the main process
 window.electronAPI.on('set-data', (event, subjectData) => {
-    console.log(subjectData);
     // Update the store with the new subjects
     Alpine.store('subjectData').loadSubjects(subjectData);
-
-    // setTimeout(updateCheckboxes, 500);
 });
 
 
 document.addEventListener('alpine:init', () => {
-    const items = () => {
-        try {
-            const storedSubjects = localStorage.getItem('subjects');
-            return storedSubjects ? JSON.parse(storedSubjects) : [];
-        } catch (e) {
-            return []
-        }
-    };
-
     // Define the Alpine store
     Alpine.store('subjectData', {
-        items: items(),  // Initially empty array
+        items: [],  // Initially empty array (will be loaded later)
         // State for managing select all and indeterminate status
         selectAll: false,
         isIndeterminate: false,
@@ -76,6 +60,21 @@ document.addEventListener('alpine:init', () => {
         // Computed property to check if items array is empty
         get isEmpty() {
             return !this.items.length;
+        },
+
+        // Lifecycle hook (called after data is initialized)
+        init() {
+            // Load stored subjects from localStorage
+            const storedSubjects = localStorage.getItem('subjects');
+            this.items = storedSubjects ? JSON.parse(storedSubjects) : [];
+
+            // Call updateSelectAllState to reflect the current state
+            this.updateSelectAllState();
+
+            // Optionally update UI elements like greeting after initialization
+            if (!this.isEmpty) {
+                document.querySelector('#user-greeting').textContent = localStorage.getItem('user-greeting');
+            }
         },
 
         // Method to load subjects dynamically
@@ -120,7 +119,7 @@ document.addEventListener('alpine:init', () => {
         async downloadSelected() {
             this.loading = true; // Set loading to true
 
-            const selectedItems = this.items.filter(item => item.checked);
+            const selectedItems = this.items.filter(item => item.checked).map(item => ({...item, completed: false}));
 
             //Persist to Localstorage
             localStorage.setItem('selectedItems', JSON.stringify(selectedItems));
@@ -142,11 +141,4 @@ document.addEventListener('alpine:init', () => {
             window.electronAPI.send('login');
         }
     });
-
-    // Call updateSelectAllState after initialization
-    Alpine.store('subjectData').updateSelectAllState();
-
-    if (!Alpine.store('subjectData').isEmpty) {
-        document.querySelector('#user-greeting').textContent = localStorage.getItem('user-greeting');
-    }
 });

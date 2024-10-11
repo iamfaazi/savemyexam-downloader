@@ -4,201 +4,56 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SaveMyExam Downloader App</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css"
-          integrity="sha512-Kc323vGBEqzTmouAECnVceyQqyqdsSiqLQISBL29aUW4U/M7pSPA/gEUZQqv1cwx4OnYxTxve5UMg5GT6L4JJg=="
-          crossorigin="anonymous" referrerpolicy="no-referrer"/>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            max-width: 80%;
-            margin: auto;
-            background: url(../assets/benner_1.jpg) no-repeat;
-            background-size: calc(88% * 2);
-        }
-
-        input, textarea {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-        }
-
-        button {
-            padding: 10px 20px;
-            background-color: #007BFF;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-right: 10px;
-        }
-
-        button:hover {
-            background-color: #0056b3;
-        }
-
-        button:disabled {
-            cursor: progress;
-            opacity: 0.75;
-        }
-
-        #output {
-            /*margin-top: 20px;*/
-            margin: 10px 0;
-            white-space: pre-wrap;
-            font-size: 14px;
-            background-color: #f4f4f4;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #ddd;
-            max-height: 200px; /* Set a fixed height */
-            overflow-y: auto; /* Enable vertical scrolling */
-            scroll-behavior: smooth; /* Enable smooth scrolling */
-
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-        }
-
-
-        /* Hide default scrollbar */
-        ::-webkit-scrollbar {
-            width: 10px; /* Width of the scrollbar */
-        }
-
-        /* Track (background) of the scrollbar */
-        ::-webkit-scrollbar-track {
-            background: rgba(0, 0, 0, 0.1); /* Light gray background */
-            border-radius: 5px; /* Rounded corners */
-        }
-
-        /* Handle (the draggable part of the scrollbar) */
-        ::-webkit-scrollbar-thumb {
-            background: rgba(0, 0, 0, 0.4); /* Darker gray for the scrollbar handle */
-            border-radius: 5px; /* Rounded corners */
-        }
-
-        /* Handle hover effect */
-        #output::-webkit-scrollbar-thumb:hover {
-            background: rgba(0, 0, 0, 0.6); /* Darker when hovered */
-        }
-
-        p {
-            margin-bottom: 5px;
-        }
-
-        .hidden {
-            display: none;
-        }
-
-        .title {
-            text-align: center;
-        }
-
-        .author {
-            text-align: center;
-            font-size: 0.75em;
-            font-weight: 600;
-            position: fixed;
-            left: 50%;
-            color: #007BFF;
-            transform: translate(-50%, 0%);
-            bottom: -16px;
-            cursor: pointer;
-        }
-
-        .log {
-            margin: 0;
-        }
-
-        .log .success {
-            color: #00C853;
-            font-weight: 600;
-            margin-top: 0.5rem;
-        }
-
-        .log .pl-3 {
-            padding: 0.75rem;
-        }
-
-        .log .warning {
-            color: #F9A825;
-            font-weight: 600;
-            margin-top: 0.5rem;
-        }
-
-        .log .danger {
-            color: #C62828;
-            font-weight: 600;
-            margin-top: 0.5rem;
-        }
-
-        .log .info {
-            color: #007BFF;
-            font-weight: 600;
-            margin-top: 0.5rem;
-        }
-
-        .log .indent {
-            padding-left: 0.75rem;
-        }
-
-        .log .pl-2 {
-            padding-left: 0.5rem;
-        }
-
-        .selected-list {
-            max-height: 100px;
-            overflow-y: auto;
-        }
-
-        .subtitle {
-            color: #C62828;
-            font-weight: 600;
-            /*font-size: 0.90em;*/
-        }
-    </style>
+    <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body x-data="$store.subjectData">
 <h1 class="title">SaveMyExam Downloader</h1>
-
-<!-- Display the default download path -->
-<p><strong>Download Folder Location:</strong> <span id="download-path"></span></p>
-
-<!-- Button to choose a download location -->
-<button id="choose-directory-button"><i class="fa-solid fa-folder-open"></i> Choose Download Folder</button>
-<!--<p><strong>Chosen Folder:</strong> <span id="chosen-directory"></span></p>-->
-<p></p>
-
 <!-- Textarea for entering download URLs -->
 <h4 class="subtitle"><i class="fa-solid fa-download"></i> Selected subject(s) for Download:</h4>
-<!--<textarea id="downloadUrls" rows="5"-->
-<!--          placeholder="https://www.savemyexams.com/gcse/biology, https://www.savemyexams.com/gcse/physics"></textarea>-->
 <ul class="selected-list">
     <template x-for="item in $store.subjectData.items" :key="item.id">
-        <li x-text="item.subjectTitle + ' - ' + item.subjectLevel"></li>
+        <li :class="{'success': isCompleted(item), 'hasLocation': item?.savedLocation}" @click="openFolder(item)"
+            :title="item?.savedLocation ? 'Click to open download folder' : ''"
+        >
+            <i class="fas fa-circle-check" x-show="isCompleted(item)"></i>
+            <span x-text="item.subjectTitle + ' - ' + item.subjectLevel"></span>
+            <template x-if="item.totalCount">
+                <span x-text="'(' + (item?.downloadedCount??0) + '/' + item.totalCount +')'"></span>
+            </template>
+        </li>
     </template>
 </ul>
 
-<button title="Back to Subject Selection" id="backBtn" :disabled="loading">
-    <i class="fa-solid fa-arrow-left-long icon" x-show="!loading"></i>
-    <i class="fas fa-circle-notch fa-spin loader" x-show="loading"></i>
+<!-- Display the default download path -->
+<p class="download-location" title="Click to open folder">
+    <strong>Download Folder Location:</strong>
+    <span id="download-path"></span>
+</p>
+
+<!-- Button to choose a download location -->
+<button id="choose-directory-button"><i class="fa-solid fa-folder-open"></i> Choose Download Folder</button>
+<p></p>
+
+<!-- Output area for logs -->
+<pre id="output"></pre>
+
+
+<button :disabled="loading || navigationLoading" id="backBtn" title="Back to Subject Selection" @click="redirectBack()">
+    <i class="fa-solid fa-arrow-left-long icon" x-show="!navigationLoading"></i>
+    <i class="fas fa-circle-notch fa-spin loader" x-show="navigationLoading"></i>
     <span class="btn-label">Back</span>
 </button>
 
+<!-- Button to start download -->
 <button id="startDownload" :disabled="loading">
     <i class="fas fa-circle-notch fa-spin loader" x-show="loading"></i>
     <i class="fa-solid fa-download icon" x-show="!loading"></i>
     <span class="btn-label" x-text="!loading ? 'Start Download' : 'Downloading...'"></span>
 </button>
 
-<!-- Button to start download -->
-<!-- Output area for logs -->
-<pre id="output"></pre>
+<h6 class="author" title="Click for view Author Message">MiRzA Haris © All right reserved.</h6>
 
-<h6 class="author">MiRzA Haris © All right reserved.</h6>
-
-<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
 
 <!-- Link to the JavaScript file -->
 <script src="./renderer.js"></script>

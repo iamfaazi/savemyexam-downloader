@@ -1,11 +1,15 @@
-const {app, BrowserWindow, ipcMain, dialog, Menu} = require('electron');
+const {app, BrowserWindow, ipcMain, dialog, Menu, shell} = require('electron');
 const path = require('path');
 const fs = require('fs');
 const pLimit = require('p-limit');
 const puppeteer = require('puppeteer');
 const dotenv = require('dotenv');
-const { autoUpdater } = require('electron-updater');
+const {autoUpdater} = require('electron-updater');
 const log = require('electron-log');
+
+const {adjustConcurrencyLimits} = require('./concurrencyManager');
+const retry = require('async-retry'); // To handle retries
+
 
 // Load environment variables
 dotenv.config();
@@ -18,6 +22,8 @@ autoUpdater.logger = log;
 
 let failList = [];
 let browserInstances = []; // Track active browser instances
+
+const PUPPETEER_HEADLESS = true
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -104,9 +110,7 @@ autoUpdater.on('update-downloaded', (info) => {
 autoUpdater.on('error', async (error) => {
     log.error('Update error:', error);
     await dialog.showMessageBox(mainWindow, {
-        type: 'error',
-        title: 'Update Error',
-        message: `Error occurred during update: ${error.message}`
+        type: 'error', title: 'Update Error', message: `Error occurred during update`
     });
 });
 
@@ -183,43 +187,28 @@ app.on('browser-window-created', (e, window) => {
 });
 
 app.on('ready', () => {
-    const menu = Menu.buildFromTemplate([
-        {
-            label: 'File',
-            submenu: [
-                {role: 'quit'} // Only include essential options
-            ]
-        },
-        {
-            label: 'Update',
-            click:()=> {
+    const menu = Menu.buildFromTemplate([{
+        label: 'File', submenu: [{role: 'quit'} // Only include essential options
+        ]
+    }, {
+        label: 'Update', click: () => {
+            autoUpdater.checkForUpdatesAndNotify().then(r => {
+            });
+            dialog.showMessageBoxSync({
+                type: 'info', title: 'App Update', message: 'Coming soon!', buttons: ['OK']
+            });
+        }
+    }, {
+        label: 'Help', submenu: [{
+            label: 'About Us', click: () => {
                 dialog.showMessageBoxSync({
-                    type: 'info',
-                    title: 'App Update',
-                    message: 'Coming soon!',
-                    buttons: ['OK']
+                    type: 'info', title: 'About Us', message: `This application is dedicated to my princess daughter, Mirza Haris, my everything, with endless love and gratitude.
+
+         "Dream big, little one, for the future is bright, and the world is yours to explore."`, buttons: ['OK']
                 });
             }
-        },
-        {
-            label: 'Help',
-            submenu: [
-                {
-                    label: 'About Us',
-                    click: () => {
-                        dialog.showMessageBoxSync({
-                            type: 'info',
-                            title: 'About Us',
-                            message: `This application is dedicated to my princess daughter, Mirza Haris, my everything, with endless love and gratitude.
-
-         "Dream big, little one, for the future is bright, and the world is yours to explore."`,
-                            buttons: ['OK']
-                        });
-                    }
-                }
-            ]
-        }
-    ]);
+        }]
+    }]);
     Menu.setApplicationMenu(menu);
 });
 
@@ -261,7 +250,8 @@ ipcMain.on('login', async (event) => {
     event.sender.send('loading', true);
 
     const browser = await puppeteer.launch({
-        headless: true,
+        headless: PUPPETEER_HEADLESS,
+        args: ['--window-size=20,20', '--window-position=0,0']
     });
 
     const page = await browser.newPage();
@@ -270,6 +260,10 @@ ipcMain.on('login', async (event) => {
     mainWindow.focus();
 
     await loginToWebsite(page, event);
+
+    //Minimize Active windows
+    // await minimizeWin(browser);
+
     await page.goto('https://www.savemyexams.com/members', {waitUntil: 'networkidle2'});
 
     const userGreeting$ = await page.waitForSelector('[data-cy="user-greeting"]', {visible: true});
@@ -289,7 +283,7 @@ ipcMain.on('login', async (event) => {
         const subjectLevel = await row.$eval('td:nth-child(2)', el => el.innerText.trim());
         const resourceUrl = await row.$eval('[class^="styles_rowAction_"]', el => el.href);
 
-        subjects.push({id: `${subjectTitle}${subjectLevel}`, subjectTitle, subjectLevel, resourceUrl})
+        subjects.push({id: `${subjectTitle}-${subjectLevel}`, subjectTitle, subjectLevel, resourceUrl})
     }
 
     event.sender.send('set-data', subjects);
@@ -300,133 +294,248 @@ ipcMain.on('login', async (event) => {
 });
 
 
-// Listen for 'start-download' event from the renderer process
-ipcMain.on('start-download', async (event, {data, downloadPath}) => {
-    // const downloadUrls = urls.split(',').map(url => url.trim()).filter(url => url);
+// Retry wrapper to handle failures
+const retryDownload = async (fn, retries = 3) => {
+    return retry(async () => await fn(), {
+        retries,
+        factor: 2,
+        minTimeout: 1000, // Initial wait 1s
+        maxTimeout: 5000, // Max wait 5s
+    });
+};
 
-    if (!data.length) {
+
+ipcMain.on('start-download', async (event, {subjects, downloadPath}) => {
+    if (!subjects.length) {
         event.sender.send('log', 'No URLs provided.');
         return;
     }
 
     event.sender.send('loading', true);
 
-    const downloadDir = downloadPath;//path.join(process.cwd(), 'downloads');
+    const downloadDir = downloadPath;
     if (!fs.existsSync(downloadDir)) {
-        fs.mkdirSync(downloadDir);
+        fs.mkdirSync(downloadDir, {recursive: true});
     }
 
+    let browser;
+
     try {
-        const browser = await puppeteer.launch({
-            headless: true,
-        });
+        browser = await puppeteer.launch({
+            headless: PUPPETEER_HEADLESS,
+            args: ['--window-size=20,20', '--window-position=0,0']
+        }); // Adjust as necessary
         const page = await browser.newPage();
-
-
-        // Set the window to always be on top
         mainWindow.focus();
 
         await loginToWebsite(page, event);
+        // Limit concurrent downloads based on system conditions (as discussed earlier)
+        const limitDownloads = pLimit(5); // Adjust this dynamically if needed
 
-        for (const subject of data) {
-            event.sender.send('log', `\nProcessing : ${subject.subjectName}`);
 
-            // Go to target page
-            await page.goto(subject.resourceUrl, {waitUntil: 'networkidle2'});
+        for (const subject of subjects) {
+            event.sender.send('log', `<span class="app-log"><i class="fa-solid fa-hourglass-end fa-flip" style="--fa-flip-x: 1; --fa-flip-y: 0;"></i>Processing: ${subject.subjectName}</span>`);
 
-            // Wait for the container div to load
-            const sectionContainer = await page.waitForSelector("::-p-xpath(//div[contains(@class, 'collapse') and contains(@class, 'show')])");
+            // Use concurrency control for downloads
+            await limitDownloads(async () => {
+                await page.goto(subject.resourceUrl, {waitUntil: 'networkidle2'});
 
-            // Find all the `a` tags with "Revision Notes" and get their href attributes
-            const targetEl = ['Revision Notes', 'Topic Questions'];
+                const sectionContainer = await page.waitForSelector('div[id^="collapse-"][class~="collapse"][class~="show"]');
 
-            const revisionNotesLinks = await sectionContainer.evaluate((params) => {
-                // const container = params.querySelector('div[class^="level-subject-overview_links__"]');
-                // if (container) {
-                const links = params.querySelectorAll('a[class^="ResourceLink_link_"]');
+                const revisionNotesLinks = await sectionContainer.evaluate(() => {
+                    const links = document.querySelectorAll('div[id^="collapse-"][class~="collapse"][class~="show"] a[class^="ResourceLink_link_"]');
+                    return Array.from(links)
+                        .filter(link => {
+                            const textElement = link.querySelector('[class^="ResourceLink_text__"]');
+                            return textElement && (textElement.innerText.trim() === 'Revision Notes' || textElement.innerText.trim() === 'Exam Questions');
+                        })
+                        .map(link => ({
+                            url: link.href,
+                            type: link.querySelector('[class^="ResourceLink_text__"]').innerText.trim(),
+                        }));
+                });
 
-                return Array.from(links)
-                    .filter(link => {
-                        const textElement = link.querySelector('[class^="ResourceLink_text__"]');
-                        return textElement && (textElement.innerText.trim() === 'Revision Notes' || textElement.innerText.trim() === 'Exam Questions');
-                    })
-                    .map(link => ({
-                        url: link.href,
-                        type: link.querySelector('[class^="ResourceLink_text__"]').innerText.trim()
-                    }));
-                // }
-                // return [];
-            });
+                if (revisionNotesLinks.length > 0) {
+                    const mainTitle = await page.$eval('h1[class^="Hero_h1_"]', el => el.innerText.trim().replace(':', '-'));
 
-            if (revisionNotesLinks.length > 0) {
-                const mainTitle = await page.$eval('h1[class^="Hero_h1_"]', el => el.innerText.trim().replace(':', '-'));
+                    for (const {url, type} of revisionNotesLinks) {
+                        const mainPath = path.join(downloadDir, mainTitle, type);
 
-                // Loop through each link and navigate to the page
-                for (const {url, type} of revisionNotesLinks) {
-
-                    //create or use existing downloads location
-                    const mainPath = path.join(downloadDir, mainTitle, type);
-
-                    if (type === 'Exam Questions') {
-                        // Specify the old and new directory names
-                        const oldDir = path.join(downloadDir, mainTitle, 'Topic Questions');
-                        const newDir = path.join(downloadDir, mainTitle, type);
-
-                        //Topics Questions
-                        if (fs.existsSync(oldDir)) {
-                            fs.rename(oldDir, newDir, err => {
-                                if (err) {
-                                    console.error('Error renaming directory:', err);
-                                } else {
-                                    console.log('Directory renamed successfully!');
-                                }
-                            });
+                        if (!fs.existsSync(mainPath)) {
+                            fs.mkdirSync(mainPath, {recursive: true});
                         }
-                    }
+                        ipcMain.emit('update-download-counts', event, {
+                            id: subject.id,
+                            savedLocation: path.join(downloadDir, mainTitle)
+                        });
 
-                    if (!fs.existsSync(mainPath)) {
-                        fs.mkdirSync(mainPath, {recursive: true});
-                    }
-
-                    try {
-                        //Download Revision Notes
                         if (type === 'Revision Notes') {
                             console.log('Revision Notes links found:', url);
-                            event.sender.send('log', `<br><br><span class="info"><i class="fa-solid fa-network-wired"></i> Initialize Revision Notes Download</span>`);
-                            await downloadRevisionNotes(url, browser, event, mainPath);
-                        } else {
+                            event.sender.send('log', `<span class="app-log info"><i class="fa-solid fa-network-wired"></i> Initialize Revision Notes Download</span>`);
+                            await downloadRevisionNotes(url, browser, event, mainPath, subject);
+                        } else if (type === 'Exam Questions') {
                             console.log('Exam Questions links found:', url);
-                            event.sender.send('log', `<br><br><span class="info"><i class="fa-regular fa-circle-question"></i> Initialize Exam Questions Download</span>`);
-                            await downloadTopicQuestions(url, browser, event, mainPath);
+                            event.sender.send('log', `<span class="app-log info"><i class="fa-regular fa-circle-question"></i> Initialize Exam Questions Download</span>`);
+                            await downloadTopicQuestions(url, browser, event, mainPath, subject);
                         }
-                    } catch (e) {
-                        console.log(e)
-                        event.sender.send('log', `<span class="danger">Error during download process</span>`);
                     }
+                } else {
+                    console.log('No download links found for', subject.subjectName);
                 }
-            } else {
-                console.log('No Downloads links found.');
-            }
+
+                //MarkAsCompleted
+                event.sender.send('markAsDownloaded', subject);
+
+            });
         }
 
         await browser.close();
-        event.sender.send('log', `<br> <span class="success"><i class="fa-regular fa-circle-check"></i> All downloads finished!</span>`);
+        event.sender.send('log', '<span class="app-log success"><i class="fa-regular fa-face-smile-wink"></i>All downloads finished!</span>');
         event.sender.send('loading', false);
     } catch (error) {
-        console.log(error)
+        log.error('Error during download process:', error);
+        event.sender.send('log', `<span class="app-log danger"><i class="fa-regular fa-face-frown"></i> Error during the download process, You may retry it again.</span>`);
         event.sender.send('loading', false);
-        event.sender.send('log', `<span class="danger">Error during download process</span>`);
+
+        if (browser) {
+            await browser.close();
+        }
     }
 });
+//
+// // Listen for 'start-download' event from the renderer process
+// ipcMain.on('start-download', async (event, {subjects, downloadPath}) => {
+//     if (!subjects.length) {
+//         event.sender.send('log', 'No URLs provided.');
+//         return;
+//     }
+//
+//     event.sender.send('loading', true);
+//
+//     const downloadDir = downloadPath;
+//     if (!fs.existsSync(downloadDir)) {
+//         fs.mkdirSync(downloadDir);
+//     }
+//
+//     try {
+//         const browser = await puppeteer.launch({
+//             headless: PUPPETEER_HEADLESSS, // args: ['--window-size=20,20', '--window-position=0,0'] // Start maximized if needed
+//         });
+//         const page = await browser.newPage();
+//
+//
+//         // Set the window to always be on top
+//         mainWindow.focus();
+//
+//         await loginToWebsite(page, event);
+//
+//         //Minimize Active windows
+//         // await minimizeWin(browser);
+//
+//         for (const subject of subjects) {
+//             event.sender.send('log', `\nProcessing : ${subject.subjectName}`);
+//
+//             // Go to target page
+//             await page.goto(subject.resourceUrl, {waitUntil: 'networkidle2'});
+//
+//             // Wait for the container div to load
+//             const sectionContainer = await page.waitForSelector("::-p-xpath(//div[contains(@class, 'collapse') and contains(@class, 'show')])");
+//
+//             // Find all the `a` tags with "Revision Notes" and get their href attributes
+//             const targetEl = ['Revision Notes', 'Topic Questions'];
+//
+//             const revisionNotesLinks = await sectionContainer.evaluate((params) => {
+//                 // const container = params.querySelector('div[class^="level-subject-overview_links__"]');
+//                 // if (container) {
+//                 const links = params.querySelectorAll('a[class^="ResourceLink_link_"]');
+//
+//                 return Array.from(links)
+//                     .filter(link => {
+//                         const textElement = link.querySelector('[class^="ResourceLink_text__"]');
+//                         return textElement && (textElement.innerText.trim() === 'Revision Notes' || textElement.innerText.trim() === 'Exam Questions');
+//                     })
+//                     .map(link => ({
+//                         url: link.href, type: link.querySelector('[class^="ResourceLink_text__"]').innerText.trim()
+//                     }));
+//                 // }
+//                 // return [];
+//             });
+//
+//             if (revisionNotesLinks.length > 0) {
+//                 const mainTitle = await page.$eval('h1[class^="Hero_h1_"]', el => el.innerText.trim().replace(':', '-'));
+//
+//                 // Loop through each link and navigate to the page
+//                 for (const {url, type} of revisionNotesLinks) {
+//
+//                     //create or use existing downloads location
+//                     const mainPath = path.join(downloadDir, mainTitle, type);
+//
+//                     if (type === 'Exam Questions') {
+//                         // Specify the old and new directory names
+//                         const oldDir = path.join(downloadDir, mainTitle, 'Topic Questions');
+//                         const newDir = path.join(downloadDir, mainTitle, type);
+//
+//                         //Topics Questions
+//                         if (fs.existsSync(oldDir)) {
+//                             fs.rename(oldDir, newDir, err => {
+//                                 if (err) {
+//                                     console.error('Error renaming directory:', err);
+//                                 } else {
+//                                     console.log('Directory renamed successfully!');
+//                                 }
+//                             });
+//                         }
+//                     }
+//
+//                     if (!fs.existsSync(mainPath)) {
+//                         fs.mkdirSync(mainPath, {recursive: true});
+//                     }
+//
+//                     try {
+//                         //Download Revision Notes
+//                         if (type === 'Revision Notes') {
+//                             console.log('Revision Notes links found:', url);
+//                             event.sender.send('log', `<br><br><span class="info"><i class="fa-solid fa-network-wired"></i> Initialize Revision Notes Download</span>`);
+//                             await downloadRevisionNotes(url, browser, event, mainPath, subject);
+//                         } else {
+//                             console.log('Exam Questions links found:', url);
+//                             event.sender.send('log', `<br><br><span class="info"><i class="fa-regular fa-circle-question"></i> Initialize Exam Questions Download</span>`);
+//                             await downloadTopicQuestions(url, browser, event, mainPath, subject);
+//                         }
+//                     } catch (e) {
+//                         log.error('During download process error:', e);
+//                         event.sender.send('log', `<span class="danger pl-3 indent pl-2">Error during download process</span>`);
+//                     }
+//                 }
+//             } else {
+//                 console.log('No Downloads links found.');
+//             }
+//         }
+//
+//         await browser.close();
+//         event.sender.send('log', `<br> <span class="success"><i class="fa-regular fa-circle-check"></i> All downloads finished!</span>`);
+//         event.sender.send('loading', false);
+//     } catch (error) {
+//         log.error('During download process error:', error);
+//         event.sender.send('loading', false);
+//         event.sender.send('log', `<span class="danger">Error during download process</span>`);
+//     }
+// });
 
 
+/**
+ *
+ * @param page
+ * @param event
+ * @return {Promise<void>}
+ */
 async function loginToWebsite(page, event) {
     try {
         await page.goto('https://www.savemyexams.com/login/?method=email-password', {waitUntil: 'networkidle2'});
         await page.type('#email-page', process.env.ACCOUNT_EMAIL);
         await page.type('#password-page', process.env.ACCOUNT_PASSWORD);
         await page.click('[data-healthcheck="login-button"]');
-        event.sender.send('log', `<i class="fas fa-lock fa-flip"></i> Logging into your account...`);
+        event.sender.send('log', `<span class="app-log"><i class="fas fa-lock fa-flip"></i> Logging into your account...</span>`);
 
         try {
             await page.waitForNavigation({waitUntil: 'networkidle2', timeout: 5000});
@@ -443,9 +552,10 @@ async function loginToWebsite(page, event) {
  * @param browser
  * @param event
  * @param downloadDir
+ * @param subjectInfo
  * @return {Promise<void>}
  */
-async function downloadRevisionNotes(url, browser, event, downloadDir) {
+async function downloadRevisionNotes(url, browser, event, downloadDir, subjectInfo) {
     console.log(`Navigating to: ${url}`);
     // Open a new page for each link
     const newPage = await browser.newPage();
@@ -471,10 +581,13 @@ async function downloadRevisionNotes(url, browser, event, downloadDir) {
 
     const mainSections = await page.$$('[data-cy^="nav-section-"]');
 
+    //Manage Concurrency
+    const {sectionLimit, downloadLimit} = await adjustConcurrencyLimits();
+    const limitSections = pLimit(sectionLimit);
+    const limitDownloads = pLimit(downloadLimit);
 
-    const limitSections = pLimit(parseInt(process.env.CONCURRENT_SECTIONS_LIMIT) || 3);
-    const limitDownloads = pLimit(parseInt(process.env.CONCURRENT_DOWNLOAD_LIMIT) || 5);
-
+    //Minimize Active windows
+    // await minimizeWin(browser);
 
     for (const section of mainSections) {
         const sectionTitle = await section.$eval('a[class^="CollapseWithLink_link_"]', el => el.innerText.trim().replace(':', '-'));
@@ -485,39 +598,54 @@ async function downloadRevisionNotes(url, browser, event, downloadDir) {
         }
 
         const subSections = await section.$$('[data-cy^="nav-topic-"]');
-        const sectionTasks = subSections.map((subSection) => limitSections(() => navigateToSubSection(subSection, sectionPath, event, page, browser)));
+        const sectionTasks = subSections.map((subSection) => limitSections(() => navigateToSubSection(subSection, sectionPath, event, page, browser, subjectInfo)));
 
-        event.sender.send('log', `<br><span class="success"><i class="fas fa-download fa-bounce loader"></i> Downloading ${sectionTitle} section's topics...</span>`);
+        event.sender.send('log', `<span class="success app-log"><i class="fas fa-download fa-bounce"></i> Downloading ${sectionTitle} section's topics...</span>`);
         await Promise.all(sectionTasks);
     }
 
+    //Try failed downloads
+    await processFailedNotesDownload(limitDownloads, browser, event, subjectInfo);
+
+    // Close the new tab after processing
+    await page.close();
+}
+
+/**
+ *
+ * @param limitDownloads
+ * @param browser
+ * @param event
+ * @param subjectInfo
+ * @return {Promise<void>}
+ */
+async function processFailedNotesDownload(limitDownloads, browser, event, subjectInfo) {
     if (failList.length > 0) {
-        event.sender.send('log', `Retrying failed downloads for ${failList.length} chapters...`);
+        event.sender.send('log', `<br><span class="info">Retrying failed downloads for ${failList.length} chapters...</span>`);
         const retryTasks = failList.map(({
-                                             text,
-                                             link,
-                                             downloadPath
-                                         }) => limitDownloads(() => downloadChapter(link, downloadPath, event, browser)));
+                                             text, link, downloadPath, subjectInfo
+                                         }) => limitDownloads(() => downloadChapter(link, downloadPath, event, browser, subjectInfo)));
+        failList = [];
         await Promise.all(retryTasks);
         event.sender.send('log', `<br> Retry process completed!`);
     } else {
         event.sender.send('log', '<br><span class="warning">No failed downloads to retry.</span>');
     }
 
-    failList = [];
-    // Close the new tab after processing
-    await page.close();
+    if (failList.length > 0) {
+        await processFailedNotesDownload(limitDownloads, browser, event, subjectInfo);
+    }
 }
-
 
 /**
  * @param url
  * @param browser
  * @param event
  * @param downloadDir
+ * @param subjectInfo
  * @return {Promise<void>}
  */
-async function downloadTopicQuestions(url, browser, event, downloadDir) {
+async function downloadTopicQuestions(url, browser, event, downloadDir, subjectInfo) {
     console.log(`Navigating to: ${url}`);
     // Open a new page for each link
     const page = await browser.newPage();
@@ -527,66 +655,78 @@ async function downloadTopicQuestions(url, browser, event, downloadDir) {
     console.log(`Successfully navigated to ${url}`);
 
     // Find the anchor tag with class 'btn' and exact text 'PDF Question Downloads' and click it
-    const downloadPageHandler = await page.locator("::-p-xpath(//a[contains(@class, 'btn') and span[normalize-space(text()) = 'PDF Question Downloads']])").waitHandle();
-    const downloadPageUrl = await downloadPageHandler.evaluate(el => el.href);
-    await page.goto(downloadPageUrl, {waitUntil: 'networkidle2'});
+    const questionsContent = await page.waitForSelector('[class^="TopicQuestionsOverviewPage_list__"]')
+    const sections = await questionsContent.$$('[class^="TopicQuestionsOverviewPage_listItem__"');
 
-    const questionsContent = await page.waitForSelector('::-p-xpath(//*[contains(@class, "questions_content_")])')
-    const sections = await questionsContent.$$('div[class^="Wrapper_wrapper__"][class*="bg-body-"]');
+    //Manage Concurrency
+    const {downloadLimit} = await adjustConcurrencyLimits();
+    const limitDownloads = pLimit(downloadLimit);
 
-    const limitSections = pLimit(parseInt(process.env.CONCURRENT_SECTIONS_LIMIT) || 3);
-    const limitDownloads = pLimit(parseInt(process.env.CONCURRENT_DOWNLOAD_LIMIT) || 5);
+    //Minimize Active windows
+    // await minimizeWin(browser);
 
     let sectionCount = 1;
     for (const section of sections) {
         //Section Directory
-        const sectionTitle = await section.$eval('[class^="Collapse_heading"', el => el.innerText.trim().replace(':', '-'));
-        const sectionPath = path.join(downloadDir, `${sectionTitle}`);
+        const sectionTitle = await section.$eval('[class~="link-body-emphasis"]', el => el.innerText.trim().replace(':', '-'));
+        const sectionPath = path.join(downloadDir, sectionTitle);
         if (!fs.existsSync(sectionPath)) fs.mkdirSync(sectionPath);
 
         console.log('\n Section :: ', sectionTitle);
 
-        const subSections = await section.$$('div[class^="Wrapper_wrapper__"].bg-body');
+        const subSections = await section.$$('[class^="TopicQuestionsOverviewPage_cards___"] > li');
 
-        const sectionQuestions = subSections.map((subSection) => limitSections(async () => {
+        const sectionQuestions = subSections.map((subSection) => limitDownloads(async () => {
             //Sub Section Directory
-            const subSectionTitle = await subSection.$eval('[class^="Collapse_heading"', el => el.innerText.trim().replace(':', '-'));
-            const subSectionPath = path.join(sectionPath, subSectionTitle);
+            const subSectionTitle = await subSection.$eval('a div p', el => el.innerText.trim().replace(':', '-'));
+            const subSectionPath = sectionPath;//path.join(sectionPath, subSectionTitle);
             if (!fs.existsSync(subSectionPath)) fs.mkdirSync(subSectionPath);
 
-            const downloadRow = await subSection.$$('table[class^="Wrapper_wrapper_"] > tbody > tr');
-
-            const downloadTasks = downloadRow.map((row) => limitDownloads(() => downloadTopicQuestionPDF(row, subSectionPath, event, subSectionTitle)));
-
-            await Promise.all(downloadTasks);
-
+            const downloadUrl = await subSection.$eval('[data-cy="question-download-button"]', el => el.href);
+            await downloadTopicQuestionPDF(downloadUrl, subSectionPath, event, subSectionTitle, subjectInfo)
         }));
 
         //Log
-        event.sender.send('log', `<br><span class="success"><i class="fas fa-download fa-bounce loader"></i> Downloading ${sectionTitle} section's topic questions...</span>
-        `);
+        event.sender.send('log', `<span class="app-log success"><i class="fas fa-download fa-bounce"></i> Downloading ${sectionTitle} section's topic questions...</span>`);
+
+        ipcMain.emit('update-download-counts', event, {id: subjectInfo.id, totalCount: sectionQuestions.length});
 
         await Promise.all(sectionQuestions);
     }
 
-
-    if (failList.length > 0) {
-        event.sender.send('log', `<br> Retrying failed downloads for ${failList.length} chapters...`);
-        const retryTasks = failList.map(({
-                                             row,
-                                             subSectionPath,
-                                             event,
-                                             subSectionTitle
-                                         }) => limitDownloads(() => downloadTopicQuestionPDF(row, subSectionPath, event, subSectionTitle)));
-        await Promise.all(retryTasks);
-        event.sender.send('log', `<br>Retry process completed!`);
-    } else {
-        event.sender.send('log', '<br> <span class="warning">No failed downloads to retry.</span>');
-    }
-
+    await processFailedQuestionPdfDownloads(limitDownloads, event);
 
     // Close the new tab after processing
     await page.close();
+}
+
+/**
+ *
+ * @param limitDownloads
+ * @param event
+ * @return {Promise<void>}
+ */
+async function processFailedQuestionPdfDownloads(limitDownloads, event) {
+
+    if (failList.length > 0) {
+        event.sender.send('log', `<br><br><span class="info"> Retrying failed downloads for ${failList.length} chapters...</span>`);
+        const retryTasks = failList.map(({
+                                             pdfUrl,
+                                             downloadPath,
+                                             event,
+                                             questionTitle,
+                                             subjectInfo
+                                         }) => limitDownloads(() => downloadTopicQuestionPDF(pdfUrl, downloadPath, event, questionTitle, subjectInfo)));
+        failList = []
+        await Promise.all(retryTasks);
+        event.sender.send('log', `<br>Retry process completed!`);
+    } else {
+        event.sender.send('log', '<span class="app-log warning">No failed downloads to retry.</span>');
+    }
+
+    if (failList.length > 0) {
+        await processFailedQuestionPdfDownloads(limitDownloads, event)
+    }
 }
 
 
@@ -597,9 +737,10 @@ async function downloadTopicQuestions(url, browser, event, downloadDir) {
  * @param event
  * @param page
  * @param browser
+ * @param subjectInfo
  * @return {Promise<void>}
  */
-async function navigateToSubSection(subSection, sectionPath, event, page, browser) {
+async function navigateToSubSection(subSection, sectionPath, event, page, browser, subjectInfo) {
     const subSectionTitle = await subSection.$eval('a[class^="CollapseWithLink_link__"]', el => el.innerText.trim().replace(':', '-'));
     const subSectionPath = path.join(sectionPath, subSectionTitle);
 
@@ -608,12 +749,21 @@ async function navigateToSubSection(subSection, sectionPath, event, page, browse
     }
 
     // Wait for the elements to be available in the DOM
-    const subSectionContent = await page.waitForSelector('div[class*="CollapseWithLink_content__"]');
-
-    // const subSectionContent = await subSection.$('div[class^="CollapseWithLink_content__"]');
+    const subSectionContent = await subSection.waitForSelector('div[class*="CollapseWithLink_content__"]');
     const downloadLinks = await subSectionContent.$$('.btn.btn-link.justify-content-center[class*="Navigation_subtopicButton__"]');
 
-    const downloadTasks = downloadLinks.map((link) => downloadChapter(link, subSectionPath, event, browser));
+    const {downloadLimit} = await adjustConcurrencyLimits();
+    const limitDownloads = pLimit(downloadLimit);
+
+    const downloadTasks = downloadLinks.map(async (link) => {
+        await limitDownloads(async () => {
+            await retryDownload(async () => {
+                await downloadChapter(link, subSectionPath, event, browser, subjectInfo)
+            })
+        });
+    });
+
+    ipcMain.emit('update-download-counts', event, {id: subjectInfo.id, totalCount: downloadTasks.length});
 
     await Promise.all(downloadTasks);
 }
@@ -624,23 +774,29 @@ async function navigateToSubSection(subSection, sectionPath, event, page, browse
  * @param downloadPath
  * @param event
  * @param browser
+ * @param subjectInfo
  * @return {Promise<void>}
  */
-async function downloadChapter(link, downloadPath, event, browser) {
+async function downloadChapter(link, downloadPath, event, browser, subjectInfo) {
     const text = await link.evaluate(el => el.innerText.trim().replace(':', '-'));
     const url = await link.evaluate(el => el.href);
 
     const chapterPage = await browser.newPage();
+    //Minimize Active windows
+    // await minimizeWin(browser);
 
     try {
         const pdfName = `${text}.pdf`;
 
         if (fs.existsSync(path.join(downloadPath, pdfName))) {
-            event.sender.send('log', `<span class="warning pl-3 indent"> ${pdfName} already exists!</span>`);
+            ipcMain.emit('update-download-counts', event, {id: subjectInfo.id, downloadedCount: 1});
+            //Downloading log
+            event.sender.send('log', `<span class="download-log warning"><i class="fa-solid fa-circle-info"></i> ${pdfName} already exists!</span>`);
             return;
         }
 
-        event.sender.send('log', `<span class="pl-3"><i class="fas fa-download fa-fade loader pl-2"></i> Downloading chapter: ${text}</span>`);
+        //Downloading log
+        event.sender.send('log', `<span class="download-log"><i class="fas fa-download fa-fade"></i> Downloading chapter: ${text}</span>`);
         const response = await chapterPage.goto(url, {waitUntil: 'networkidle2'});
 
         if (response.status() === 429) {
@@ -653,13 +809,18 @@ async function downloadChapter(link, downloadPath, event, browser) {
         if (pdfUrl) {
             const pdfBuffer = await downloadProgress(chapterPage, pdfUrl);
             fs.writeFileSync(path.join(downloadPath, pdfName), Buffer.from(pdfBuffer));
-            event.sender.send('log', `<span class="success pl-3"><i class="fas fa-circle-check loader pl-2"></i> Downloaded ${pdfName} successfully!</span>`);
+            //updateDownloadStatus
+            ipcMain.emit('update-download-counts', event, {id: subjectInfo.id, downloadedCount: 1});
+
+            //Downloading log
+            event.sender.send('log', `<span class="download-log success"><i class="fas fa-circle-check"></i> ${pdfName} Downloaded successfully!</span>`);
         } else {
             event.sender.send('log', `<span class="warning indent">No download link found for chapter: ${text}</span>`);
         }
     } catch (error) {
-        failList.push({link, downloadPath, event, browser});
-        event.sender.send('log', `<span class="danger pl-3 indent">Error downloading chapter ${text}</span>`);
+        failList.push({link, downloadPath, event, browser, subjectInfo});
+        event.sender.send('log', `<span class="download-log danger"><i class="fa-solid fa-triangle-exclamation"></i> Download failed chapter ${text}</span>`);
+        log.error('Downloading chapter error:', error);
     } finally {
         await chapterPage.close();
     }
@@ -682,45 +843,59 @@ async function downloadProgress(page, pdfUrl) {
 
 /**
  * @desc Download Topic Question PDF
- * @param {CdpElementHandle} row
+ * @param pdfUrl
  * @param {string} downloadPath
  * @param event
- * @param subSectionTitle
+ * @param questionTitle
+ * @param subjectInfo
  * @return {Promise<void>}
  */
-async function downloadTopicQuestionPDF(row, downloadPath, event, subSectionTitle) {
-    const textElement = await row.$('[class^="DownloadsTable_text_"]');
-    const linkElement = await row.$('td a[data-cy="question-download-button"]');  // Target the <a> tag inside the td
-    const text = await textElement.evaluate(el => el.innerText.trim().replace(':', '-'));  // Get the text from the td
-    const questionTitle = `${subSectionTitle} - ${text}`;
+async function downloadTopicQuestionPDF(pdfUrl, downloadPath, event, questionTitle, subjectInfo) {
 
     try {
-        if (textElement && linkElement) {
-            const pdfUrl = await linkElement.evaluate(el => el.href);  // Get the text from the td
-            console.log(`Sub Section :: ${questionTitle}`)
+        console.log(`Sub Section :: ${questionTitle}`)
+        const pdfName = `${questionTitle}.pdf`;
 
-            const pdfName = `${text}.pdf`;
-
-            if (fs.existsSync(path.join(downloadPath, pdfName))) {
-                event.sender.send('log', `<span class="warning pl-3 indent pl-2">${questionTitle}.pdf already exists!</span>`);
-                return;
-            }
-
-            event.sender.send('log', `<span class="pl-3"><i class="fas fa-download fa-fade loader pl-2"></i> Downloading ${questionTitle}</span>`);
-
-            if (pdfUrl) {
-                const response = await fetch(pdfUrl);
-                const arrayBuffer = await response.arrayBuffer();
-                const pdfBuffer = Array.from(new Uint8Array(arrayBuffer));
-                fs.writeFileSync(path.join(downloadPath, pdfName), Buffer.from(pdfBuffer));
-                event.sender.send('log', `<span class="success pl-3"><i class="fas fa-circle-check loader pl-2"></i> Downloaded ${questionTitle} successfully!</span>`);
-            } else {
-                event.sender.send('log', `<span class="danger pl-3 indent">No download link found for chapter: ${text}</span>`);
-            }
+        if (fs.existsSync(path.join(downloadPath, pdfName))) {
+            ipcMain.emit('update-download-counts', event, {id: subjectInfo.id, downloadedCount: 1});
+            event.sender.send('log', `<span class="download-log warning"><i class="fa-solid fa-circle-info"></i> ${questionTitle}.pdf already exists!</span>`);
+            return;
         }
 
+        event.sender.send('log', `<span class="download-log"><i class="fas fa-download fa-fade"></i> Downloading ${questionTitle}</span>`);
+
+        if (pdfUrl) {
+            const response = await fetch(pdfUrl);
+            const arrayBuffer = await response.arrayBuffer();
+            const pdfBuffer = Array.from(new Uint8Array(arrayBuffer));
+            fs.writeFileSync(path.join(downloadPath, pdfName), Buffer.from(pdfBuffer));
+            ipcMain.emit('update-download-counts', event, {id: subjectInfo.id, downloadedCount: 1});
+            event.sender.send('log', `<span class="download-log success"><i class="fas fa-circle-check"></i> Downloaded ${questionTitle} successfully!</span>`);
+        } else {
+            event.sender.send('log', `<span class="danger pl-3 indent">No download link found for chapter: ${questionTitle}</span>`);
+        }
     } catch (error) {
-        failList.push({row, downloadPath, event, subSectionTitle});
-        event.sender.send('log', `<span class="danger pl-3 indent">Error downloading topic question ${questionTitle}: ${error.message}</span>`);
+        failList.push({pdfUrl, downloadPath, event, questionTitle, subjectInfo});
+        event.sender.send('log', `<span class="download-log danger"><i class="fa-solid fa-triangle-exclamation"></i> Download failed topic question ${questionTitle}:</span>`);
+        log.error('Downloading topic question error:', error);
     }
 }
+
+// Listener for internal event
+ipcMain.on('update-download-counts', (event, downloadData) => {
+    console.log('Download started:', downloadData);
+    event.sender.send('updateDownloadStatus', downloadData);
+});
+
+
+// Listen for the 'open-folder' event from the renderer
+ipcMain.on('open-folder', (event, folderPath) => {
+    // Use Electron's shell to open the folder in the default file explorer
+    shell.openPath(folderPath)
+        .then(response => {
+            if (response) {
+                console.error('Failed to open folder:', response);  // Error handling
+            }
+        });
+});
+
