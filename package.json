@@ -22,7 +22,7 @@
     "systeminformation": "^5.23.5"
   },
   "build": {
-    "appId": "com.example.savemyexamsdownloader",
+    "appId": "com.fz.savemyexamsdownloader",
     "productName": "SavemyExam Downloader",
     "files": [
       "src/*",

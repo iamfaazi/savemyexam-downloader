@@ -47,29 +47,16 @@ function validateUrls(urls) {
 
 // Handle download initiation
 document.getElementById('startDownload').addEventListener('click', async () => {
-    document.getElementById('output').innerText = '';  // Clear the output on each action
-
+    Alpine.store('subjectData').clearLogs(); // Clear the output on each action
     const subjects = Alpine.store('subjectData').items.map(item => ({
         id: item.id,
         resourceUrl: item.resourceUrl,
         subjectName: `${item.subjectTitle} ${item.subjectLevel}`
     }))
 
-    //document.getElementById('downloadUrls').value.trim();
-    // console.log(downloadUrls)
-    // if (!urls) {
-    //     document.getElementById('output').innerText = 'Please enter URLs.';
-    //     return;
-    // }
-    //
-    // if (!validateUrls(urls)) {
-    //     document.getElementById('output').innerText = 'Invalid URLs. Please enter valid download links.';
-    //     return;
-    // }
-
     try {
         const downloadPath = localStorage.getItem('downloadPath');
-        document.getElementById('output').innerHTML = '<i class="fa-solid fa-rocket fa-beat-fade"></i> Initialize download process... \n';
+        Alpine.store('subjectData').updateDownloadLog(null, '<span class="app-log"><i class="fa-solid fa-rocket fa-beat-fade"></i> Initialize download process...</span>');
         window.electronAPI.send('start-download', {subjects, downloadPath});
     } catch (error) {
         console.error('Failed to initiate download:', error);
@@ -81,25 +68,8 @@ document.getElementById('startDownload').addEventListener('click', async () => {
 document.getElementById('choose-directory-button').addEventListener('click', chooseDownloadLocation);
 
 // Listen for logs from the main process
-window.electronAPI.on('log', (event, message) => {
-    const outputElement = document.getElementById('output');
-    // Append logs using insertAdjacentHTML instead of appending#
-    outputElement.insertAdjacentHTML('beforeend', `<p class="log">${message}</p>`);
-    // outputElement.innerText += message + '\n';  // Append logs instead of overwriting
-    // outputElement.scrollTop = outputElement.scrollHeight;  // Auto scroll to the bottom
-
-    // Check if user scrolled to the bottom
-    // const isAtBottom = outputElement.scrollHeight - outputElement.clientHeight <= outputElement.scrollTop + 1;
-
-    // Auto scroll to the bottom if enabled and user is at the bottom
-    // if (isAtBottom) {
-    //     outputElement.scrollTop = outputElement.scrollHeight; // Smooth scroll is handled by CSS
-    // }
-
-    // Use setTimeout to ensure the DOM updates before scrolling
-    setTimeout(() => {
-        outputElement.scrollTop = outputElement.scrollHeight;
-    }, 0);
+window.electronAPI.on('log', (event, message, downloadId = null, percent = null) => {
+    Alpine.store('subjectData').updateDownloadLog(downloadId, message, percent);
 });
 
 
@@ -138,6 +108,7 @@ document.addEventListener('alpine:init', () => {
     // Define the Alpine store
     Alpine.store('subjectData', {
         items: items(),  // Initially empty array
+        logs: [],       // Initially empty array
         loading: false, // Loading state,
         navigationLoading: false,
 
@@ -210,6 +181,41 @@ document.addEventListener('alpine:init', () => {
         openFolder(item) {
             if (item?.savedLocation)
                 window.electronAPI.send('open-folder', item.savedLocation);
+        },
+        // Update download progress (new method)
+        updateDownloadLog(downloadId, message, percent) {
+            if (downloadId) {
+                const item = this.logs.find(log => log.id === downloadId);
+                if (item) {
+                    item.message = message
+                    if (percent) {
+                        item.percent = parseFloat(percent);
+                    }
+                } else {
+                    this.logs.push({id: downloadId, message});
+                }
+            } else {
+                this.logs.push({id: window.electronAPI.randomUUID(), message});
+                const outputElement = document.getElementById('output');
+                // Use setTimeout to ensure the DOM updates before scrolling
+                setTimeout(() => {
+                    outputElement.scrollTop = outputElement.scrollHeight;
+                }, 0);
+            }
+
+            localStorage.setItem('logs', JSON.stringify(this.logs))
+        },
+        // Update download progress (new method)
+        clearLogs() {
+            this.logs = [];
+        },
+        progressOffset(progress) {
+            const radius = 10; // Updated radius for the 25px circle
+            const circumference = 2 * Math.PI * radius;
+            const offset = circumference - (progress / 100) * circumference;
+
+            // Ensure offset is positive and within bounds
+            return Math.max(0, Math.min(offset, circumference));
         }
     });
 });

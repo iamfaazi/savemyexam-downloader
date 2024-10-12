@@ -2,6 +2,7 @@ const {contextBridge, ipcRenderer} = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const {randomUUID} = require('crypto');
 
 
 // Expose ipcRenderer methods and Node.js modules safely
@@ -16,7 +17,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     send: (channel, args) => ipcRenderer.send(channel, args),
     on: (channel, callback) => {
-        const subscription = (event, data) => callback(event, data);
+        const subscription = (event, ...data) => callback(event, ...data);
         ipcRenderer.on(channel, subscription);
         return () => ipcRenderer.removeListener(channel, subscription); // Unsubscribe if necessary
     },
@@ -45,5 +46,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
         readFile: (filePath, encoding) => fs.promises.readFile(filePath, encoding),
         writeFile: (filePath, data) => fs.promises.writeFile(filePath, data),
         exists: (filePath) => fs.existsSync(filePath),
-    }
+    },
+    randomUUID: () => randomUUID(),
 });

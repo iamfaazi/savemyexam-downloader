@@ -35,8 +35,31 @@
 <p></p>
 
 <!-- Output area for logs -->
-<pre id="output"></pre>
+<div id="output">
+    <template x-for="log in $store.subjectData.logs" :key="log.id">
+        <div class="log" :class="{'hasProgressbar': log.percent && log.percent < 100}">
+            <span class="progress-wrapper icon fa-fade" x-show="log.percent && log.percent < 100"
+                  :title="+ Math.round(log.percent) + '% completed'">
+                <svg class="progress-circle" viewBox="0 0 25 25">
+                    <circle class="progress-circle__background" cx="12.5" cy="12.5" r="10"></circle>
+                    <circle
+                            class="progress-circle__foreground"
+                            cx="12.5"
+                            cy="12.5"
+                            r="10"
+                            :style="{ strokeDashoffset: progressOffset(log.percent) }"
+                            transform="rotate(-90 12.5 12.5)"
+                    >
 
+                    </circle>
+                    <!-- Percentage text -->
+                    <text class="progress-text" x="12.5" y="12.5" x-text="Math.round(log.percent) + '%'"></text>
+                </svg>
+            </span>
+            <span x-html="log.message"></span>
+        </div>
+    </template>
+</div>
 
 <button :disabled="loading || navigationLoading" id="backBtn" title="Back to Subject Selection" @click="redirectBack()">
     <i class="fa-solid fa-arrow-left-long icon" x-show="!navigationLoading"></i>
@@ -57,6 +80,34 @@
 
 <!-- Link to the JavaScript file -->
 <script src="./renderer.js"></script>
+<script>
+    function circularProgress() {
+        return {
+            progress: 78, // Starting percentage
+            get progressOffset() {
+                const radius = 10; // Updated radius for the 25px circle
+                const circumference = 2 * Math.PI * radius;
+                const offset = circumference - (this.progress / 100) * circumference;
+
+                // Ensure offset is positive and within bounds
+                return Math.max(0, Math.min(offset, circumference));
+            },
+            increase() {
+                if (this.progress < 100) {
+                    this.progress += 10;
+                    if (this.progress > 100) {
+                        this.progress = 100;
+                    }
+                }
+            },
+            decrease() {
+                if (this.progress > 0) {
+                    this.progress -= 10;
+                }
+            }
+        }
+    }
+</script>
 </body>
 </html>
 

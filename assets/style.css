@@ -3,6 +3,7 @@
 
 :root {
     --primary-color: #3498db;
+    --secondary-color: #37474F;
     --success-color: #00C853;
     --info-color: #007BFF;
     --warning-color: #F9A825;
@@ -118,7 +119,7 @@ button:hover, .styled-table tbody tr:hover {
 
 #output {
     margin: 10px 0;
-    white-space: pre-wrap;
+    /*white-space: pre-wrap;*/
     font-size: 14px;
     background-color: #f4f4f4;
     padding: 10px;
@@ -129,6 +130,9 @@ button:hover, .styled-table tbody tr:hover {
     scroll-behavior: smooth; /* Enable smooth scrolling */
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     min-height: 200px;
+    display: block;
+    font-family: monospace;
+    unicode-bidi: isolate;
 }
 
 p {
@@ -174,6 +178,10 @@ p {
 
 .info {
     color: var(--info-color);
+}
+
+.secondary {
+    color: var(--secondary-color);
 }
 
 
@@ -376,4 +384,55 @@ p {
 
 .download-location #download-path, .hasLocation {
     text-decoration: underline;
+}
+
+
+.progress-wrapper {
+    display: inline-flex;
+    cursor: progress;
+    padding-top: 0.1rem;
+    padding-left: 1rem;
+}
+
+.progress-circle {
+    width: 25px;
+    height: 25px;
+    position: relative;
+}
+
+.progress-circle__background,
+.progress-circle__foreground {
+    fill: none;
+    stroke-width: 2; /* Adjust stroke width */
+}
+
+.progress-circle__background {
+    stroke: #e6e6e6; /* Background color */
+}
+
+.progress-circle__foreground {
+    stroke: var(--success-color); /* Progress color */
+    stroke-linecap: round;
+    stroke-dasharray: 62.83; /* Circumference of circle with r=10 */
+    stroke-dashoffset: 62.83;
+    transition: stroke-dashoffset 0.5s ease;
+}
+
+.progress-text {
+    font-size: 7px; /* Adjust font size for 25px circle */
+    fill: var(--danger-color); /* Text color */
+    text-anchor: middle; /* Center the text horizontally */
+    dominant-baseline: middle; /* Center the text vertically */
+    font-weight: 600;
+    font-family: "Open Sans", sans-serif;
+}
+
+.log.hasProgressbar {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.log.hasProgressbar .download-log {
+    padding: 0;
 }
